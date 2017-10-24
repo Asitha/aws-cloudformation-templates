@@ -1,0 +1,305 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  ##############################
+  # Create VPC and subnets
+  ##############################
+  EIEnvVPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      InstanceTenancy: default
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+        - Key: Name
+          Value: ei-vpc
+  EIEnvPrivateSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select
+        - '0'
+        - !GetAZs ''
+      VpcId: !Ref EIEnvVPC
+      Tags:
+        - Key: Name
+          Value: ei-private-subnet-1
+  EIEnvPublicSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: 10.0.0.0/24
+      AvailabilityZone: !Select
+        - '0'
+        - !GetAZs ''
+      VpcId: !Ref EIEnvVPC
+      Tags:
+        - Key: Name
+          Value: ei-public-subnet-1
+  EIEnvInternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties: {}
+  EIEnvDHCPOptions:
+    Type: 'AWS::EC2::DHCPOptions'
+    Properties:
+      DomainNameServers:
+        - AmazonProvidedDNS
+  EIEnvNetworkAcl:
+    Type: 'AWS::EC2::NetworkAcl'
+    Properties:
+      VpcId: !Ref EIEnvVPC
+  EIEnvPublicRouteTable1:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref EIEnvVPC
+  EIEnvRouteTable2:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref EIEnvVPC
+  EIEnvBastionEIPAssociation:
+    Type: 'AWS::EC2::EIPAssociation'
+    Properties:
+      AllocationId: !GetAtt EIEnvBastionEIP.AllocationId
+      InstanceId: !Ref EIEnvBastionNode
+
+  ################################
+  # Create network configurations
+  ################################
+  EIEnvNATGateway:
+    DependsOn: gw1
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt EIEnvEIP1.AllocationId
+      SubnetId: !Ref EIEnvPublicSubnet1
+      Tags:
+        - Key: Name
+          Value: EIEnvNatGateway
+  acl1:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Egress: 'true'
+      Protocol: '-1'
+      RuleAction: allow
+      RuleNumber: '100'
+      NetworkAclId: !Ref EIEnvNetworkAcl
+  acl2:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Protocol: '-1'
+      RuleAction: allow
+      RuleNumber: '100'
+      NetworkAclId: !Ref EIEnvNetworkAcl
+  subnetacl1:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      NetworkAclId: !Ref EIEnvNetworkAcl
+      SubnetId: !Ref EIEnvPrivateSubnet1
+  subnetacl2:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      NetworkAclId: !Ref EIEnvNetworkAcl
+      SubnetId: !Ref EIEnvPublicSubnet1
+  gw1:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref EIEnvVPC
+      InternetGatewayId: !Ref EIEnvInternetGateway
+  subnetroute1:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref EIEnvPublicRouteTable1
+      SubnetId: !Ref EIEnvPublicSubnet1
+
+  subnetroute2:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref EIEnvRouteTable2
+      SubnetId: !Ref EIEnvPrivateSubnet1
+  route1:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref EIEnvPublicRouteTable1
+      GatewayId: !Ref EIEnvInternetGateway
+    DependsOn: gw1
+  route2:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref EIEnvRouteTable2
+      NatGatewayId: !Ref EIEnvNATGateway
+  dchpassoc1:
+    Type: 'AWS::EC2::VPCDHCPOptionsAssociation'
+    Properties:
+      VpcId: !Ref EIEnvVPC
+      DhcpOptionsId: !Ref EIEnvDHCPOptions
+
+  #########################
+  # Create security groups
+  ######################### 
+  EIEnvInstanceSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: security group for EI EC2 compute instances
+      VpcId: !Ref EIEnvVPC
+  EIEnvInstanceSGIngressSSH:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref EIEnvInstanceSecurityGroup
+      IpProtocol: tcp
+      FromPort: '22'
+      ToPort: '22'
+      CidrIp: 0.0.0.0/0
+  EIEnvInstanceSGEgressALL:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      GroupId: !Ref EIEnvInstanceSecurityGroup
+      IpProtocol: '-1'
+      CidrIp: 0.0.0.0/0
+
+  ###########################
+  # Create Elastic IPs
+  ###########################
+  EIEnvBastionEIP:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+  EIEnvEIP1:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+
+  #######################
+  # EC2 Compute instances
+  #######################
+  EIEnvBastionNode:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      DisableApiTermination: 'false'
+      InstanceInitiatedShutdownBehavior: stop
+      ImageId: ami-09d2fb69
+      InstanceType: t2.micro
+      KeyName: test-key
+      Monitoring: 'false'
+      UserData: 
+        Fn::Base64: 
+          !Sub |
+            #!/bin/bash -xe
+            cd /tmp/
+            wget -N https://raw.githubusercontent.com/Asitha/aws-cloudformation-templates/master/setup-instance-env.sh
+            nohup sh ./setup-instance-env.sh 2>&1 > /home/ubuntu/setup-instance-env.out 
+            echo "jdbc:mysql://${EIEnvDBInstance.Endpoint.Address}:${EIEnvDBInstance.Endpoint.Port}" > /home/ubuntu/db.txt
+      Tags:
+        - Key: Name
+          Value: ei-bastion-node
+      NetworkInterfaces:
+        - DeleteOnTermination: 'true'
+          Description: Primary network interface
+          DeviceIndex: 0
+          SubnetId: !Ref EIEnvPublicSubnet1
+          PrivateIpAddresses:
+            - PrivateIpAddress: 10.0.0.70
+              Primary: 'true'
+          GroupSet:
+            - !Ref EIEnvInstanceSecurityGroup
+  EIEnvMainInstance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      DisableApiTermination: 'false'
+      InstanceInitiatedShutdownBehavior: stop
+      ImageId: ami-09d2fb69
+      InstanceType: t2.micro
+      KeyName: test-key
+      Monitoring: 'false'
+      UserData: 
+        Fn::Base64: 
+          !Sub |
+            #!/bin/bash -xe
+            cd /tmp/
+            wget -N https://raw.githubusercontent.com/Asitha/aws-cloudformation-templates/master/setup-instance-env.sh
+            nohup sh ./setup-instance-env.sh 2>&1 > /home/ubuntu/setup-instance-env.out 
+            echo "jdbc:mysql://${EIEnvDBInstance.Endpoint.Address}:${EIEnvDBInstance.Endpoint.Port}" > /home/ubuntu/db.txt 
+      Tags:
+        - Key: Name
+          Value: ei-instance1
+      NetworkInterfaces:
+        - DeleteOnTermination: 'true'
+          Description: Primary network interface
+          DeviceIndex: 0
+          SubnetId: !Ref EIEnvPrivateSubnet1
+          PrivateIpAddresses:
+            - PrivateIpAddress: 10.0.1.71
+              Primary: 'true'
+          GroupSet:
+            - !Ref EIEnvInstanceSecurityGroup
+  EIEnvAnalyticsInstance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      DisableApiTermination: 'false'
+      InstanceInitiatedShutdownBehavior: stop
+      ImageId: ami-09d2fb69
+      InstanceType: t2.micro
+      KeyName: test-key
+      Monitoring: 'false'
+      UserData: 
+        Fn::Base64: 
+          !Sub |
+            #!/bin/bash -xe
+            cd /tmp/
+            wget -N https://raw.githubusercontent.com/Asitha/aws-cloudformation-templates/master/setup-instance-env.sh
+            nohup sh ./setup-instance-env.sh 2>&1 > /home/ubuntu/setup-instance-env.out 
+            echo "jdbc:mysql://${EIEnvDBInstance.Endpoint.Address}:${EIEnvDBInstance.Endpoint.Port}" > /home/ubuntu/db.txt
+      Tags:
+        - Key: Name
+          Value: ei-analytics-instance
+      NetworkInterfaces:
+        - DeleteOnTermination: 'true'
+          Description: Primary network interface
+          DeviceIndex: 0
+          SubnetId: !Ref EIEnvPrivateSubnet1
+          PrivateIpAddresses:
+            - PrivateIpAddress: 10.0.1.72
+              Primary: 'true'
+          GroupSet:
+            - !Ref EIEnvInstanceSecurityGroup
+
+  #######################
+  # Create RDS instances
+  #######################
+  EIEnvDBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBSecurityGroups: 
+        - !Ref EIEnvDbSecurityByCIDRIPGroup
+      AllocatedStorage: 20
+      DBInstanceClass: db.t2.micro
+      Engine: MySQL
+      DBInstanceIdentifier: eidbinstance
+      MasterUsername: root
+      MasterUserPassword: root1234
+      AutoMinorVersionUpgrade: false
+      BackupRetentionPeriod: 0
+      AvailabilityZone: !Select
+        - '0'
+        - !GetAZs ''
+    DeletionPolicy: Snapshot
+  EIEnvDbSecurityByCIDRIPGroup:
+    Type: AWS::RDS::DBSecurityGroup
+    Properties:
+      GroupDescription: Ingress for CIDRIP
+      DBSecurityGroupIngress:
+        - CIDRIP: "10.0.0.0/16"
+
+#####################################
+# Print details of the created stack 
+#####################################       
+Description: Creates a VPC with two subnets for EI
+Outputs:
+  DatabaseURL: 
+    Value: !Sub '${EIEnvDBInstance.Endpoint.Address}:${EIEnvDBInstance.Endpoint.Port}'
+    Description: "MySQL database url"
+  BastionEIP:
+    Value: !Sub '${EIEnvBastionNode.PublicIp}'
+    Description: Elastic IP for the Bastion node
+
