@@ -10,10 +10,13 @@ WUM_PASS=$2
 update_apt() {
     echo "127.0.0.1 $(hostname)" >> /etc/hosts
     apt-get update -y
+    apt install unzip -y
+    apt install git -y
+    apt install ant -y
 }
 
 install_mysql() {
-apt install -y mysql-client
+    apt install -y mysql-client
     mkdir -p $BIN_DIR
     wget -P $BIN_DIR http://central.maven.org/maven2/mysql/mysql-connector-java/5.1.44/mysql-connector-java-5.1.44.jar
 }
