@@ -1,0 +1,10 @@
+hostname=127.0.0.1
+domain.name=localhost
+db_url=jdbc:mysql://localhost:3306
+db_user=root
+db_password=root1234
+registry.database=reg_db
+user.database=um_db
+
+
+

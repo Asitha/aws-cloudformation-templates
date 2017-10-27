@@ -43,6 +43,7 @@ Parameters:
       - No
     ConstraintDescription: Must specify whether to use an external RDS instance or not
     Description: Use RDS instance as an external DB for the nodes.
+
 Conditions:
   CreateRDSResource: !Equals [ !Ref UseRDS, Yes ]
 Resources:
@@ -317,66 +318,6 @@ Resources:
               Primary: 'true'
           GroupSet:
             - !Ref EIEnvInstanceSecurityGroup
-  EIEnvAnalyticsInstance:
-    Type: 'AWS::EC2::Instance'
-    Properties:
-      DisableApiTermination: 'false'
-      InstanceInitiatedShutdownBehavior: stop
-      ImageId: ami-09d2fb69
-      InstanceType: t2.micro
-      KeyName: test-key
-      Monitoring: 'false'
-      UserData: 
-        Fn::Base64:
-          !Sub |
-            #!/bin/bash -xe
-            cd /home/ubuntu/
-            git clone https://github.com/Asitha/aws-cloudformation-templates.git --depth 1
-            chown -R ubuntu aws-cloudformation-templates
-            cd aws-cloudformation-templates
-            chmod +x ./setup-instance-env.sh
-            chmod +x ./setup-ei6.1.1.sh
-            bash ./setup-instance-env.sh ubuntu ${WUMUserName} ${WUMPassword} &> /home/ubuntu/setup-instance-env.out
-      Tags:
-        - Key: Name
-          Value: ei-analytics-instance
-      NetworkInterfaces:
-        - DeleteOnTermination: 'true'
-          Description: Primary network interface
-          DeviceIndex: 0
-          SubnetId: !Ref EIEnvPrivateSubnet1
-          PrivateIpAddresses:
-            - PrivateIpAddress: 10.0.1.72
-              Primary: 'true'
-          GroupSet:
-            - !Ref EIEnvInstanceSecurityGroup
-
-  #######################
-  # Create RDS instances
-  #######################
-  EIEnvDBInstance:
-    Type: AWS::RDS::DBInstance
-    Properties:
-      DBSecurityGroups: 
-        - !Ref EIEnvDbSecurityByCIDRIPGroup
-      AllocatedStorage: 20
-      DBInstanceClass: db.t2.micro
-      Engine: MySQL
-      DBInstanceIdentifier: eidbinstance
-      MasterUsername: root
-      MasterUserPassword: root1234
-      AutoMinorVersionUpgrade: false
-      BackupRetentionPeriod: 0
-      AvailabilityZone: !Select
-        - '0'
-        - !GetAZs ''
-    DeletionPolicy: Snapshot
-  EIEnvDbSecurityByCIDRIPGroup:
-    Type: AWS::RDS::DBSecurityGroup
-    Properties:
-      GroupDescription: Ingress for CIDRIP
-      DBSecurityGroupIngress:
-        - CIDRIP: "10.0.0.0/16"
 
   ########################
   # Create Load Balancers
@@ -431,9 +372,6 @@ Resources:
 #####################################       
 Description: Creates a VPC with two subnets for EI
 Outputs:
-  DatabaseURL: 
-    Value: !Sub '${EIEnvDBInstance.Endpoint.Address}:${EIEnvDBInstance.Endpoint.Port}'
-    Description: "MySQL database url"
   BastionEIP:
     Value: !Sub '${EIEnvBastionNode.PublicIp}'
     Description: Elastic IP for the Bastion node
