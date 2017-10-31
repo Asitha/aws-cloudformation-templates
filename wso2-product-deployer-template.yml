@@ -1,6 +1,44 @@
 AWSTemplateFormatVersion: 2010-09-09
 
-Parameters: 
+##############################################################################################
+# Mappings for Ubuntu AMIs
+# Refer https://cloud-images.ubuntu.com/locator/ec2/ for ubuntu AMI-ID's for the LTS version
+##############################################################################################
+Mappings:
+  RegionMap:
+    ap-northeast-1:
+      AMI: ami-15872773
+    ap-northeast-2:
+      AMI: ami-7b1cb915
+    ap-south-1:
+      AMI: ami-bc0d40d3
+    ap-southeast-1:
+      AMI: ami-67a6e604
+    ap-southeast-2:
+      AMI: ami-41c12e23
+    ca-central-1:
+      AMI: ami-8a71c9ee
+    eu-central-1:
+      AMI: ami-97e953f8
+    eu-west-1:
+      AMI: ami-add175d4
+    eu-west-2:
+      AMI: ami-ecbea388
+    sa-east-1:
+      AMI: ami-466b132a
+    us-east-1:
+      AMI: ami-da05a4a0
+    us-east-2:
+      AMI: ami-336b4456
+    us-west-1:
+      AMI: ami-1c1d217c
+    us-west-2:
+      AMI: ami-0a00ce72
+
+#############################
+# User inputs
+#############################
+Parameters:
   WUMUserName: 
     Type: String
     Default: ""
@@ -35,6 +73,13 @@ Parameters:
     Type: String
     Default: ubuntu
     Description: Username of the EC2 instance user.
+  DeploymentType:
+      Type: String
+      Default: NodesWithoutProducts
+      AllowedValues:
+        - OneNodeEI6.1.1-Deployment
+        - OneNodeAPIM-2.1.0-Deployment
+        - NodesWithoutProducts
   UseRDS:
     Type: String
     Default: No
@@ -45,11 +90,15 @@ Parameters:
     Description: Use RDS instance as an external DB for the nodes.
 Conditions:
   CreateRDSResource: !Equals [ !Ref UseRDS, Yes ]
+
+################################
+# Create AWS resources
+################################
 Resources:
   ##############################
   # Create VPC and subnets
   ##############################
-  EIEnvVPC:
+  WSO2EnvVPC:
     Type: 'AWS::EC2::VPC'
     Properties:
       CidrBlock: 10.0.0.0/16
@@ -59,77 +108,77 @@ Resources:
       Tags:
         - Key: Name
           Value: ei-vpc
-  EIEnvPrivateSubnet1:
+  WSO2EnvPrivateSubnet1:
     Type: 'AWS::EC2::Subnet'
     Properties:
       CidrBlock: 10.0.1.0/24
       AvailabilityZone: !Select
         - '0'
         - !GetAZs ''
-      VpcId: !Ref EIEnvVPC
+      VpcId: !Ref WSO2EnvVPC
       Tags:
         - Key: Name
           Value: ei-private-subnet-1
-  EIEnvPublicSubnet1:
+  WSO2EnvPublicSubnet1:
     Type: 'AWS::EC2::Subnet'
     Properties:
       CidrBlock: 10.0.0.0/24
       AvailabilityZone: !Select
         - '0'
         - !GetAZs ''
-      VpcId: !Ref EIEnvVPC
+      VpcId: !Ref WSO2EnvVPC
       Tags:
         - Key: Name
           Value: ei-public-subnet-1
-  EIEnvPublicSubnet2:
+  WSO2EnvPublicSubnet2:
     Type: 'AWS::EC2::Subnet'
     Properties:
       CidrBlock: 10.0.2.0/24
       AvailabilityZone: !Select
         - '1'
         - !GetAZs ''
-      VpcId: !Ref EIEnvVPC
+      VpcId: !Ref WSO2EnvVPC
       Tags:
         - Key: Name
           Value: ei-public-subnet-2
-  EIEnvInternetGateway:
+  WSO2EnvInternetGateway:
     Type: 'AWS::EC2::InternetGateway'
     Properties: {}
-  EIEnvDHCPOptions:
+  WSO2EnvDHCPOptions:
     Type: 'AWS::EC2::DHCPOptions'
     Properties:
       DomainNameServers:
         - AmazonProvidedDNS
-  EIEnvNetworkAcl:
+  WSO2EnvNetworkAcl:
     Type: 'AWS::EC2::NetworkAcl'
     Properties:
-      VpcId: !Ref EIEnvVPC
-  EIEnvPublicRouteTable1:
+      VpcId: !Ref WSO2EnvVPC
+  WSO2EnvPublicRouteTable1:
     Type: 'AWS::EC2::RouteTable'
     Properties:
-      VpcId: !Ref EIEnvVPC
-  EIEnvRouteTable2:
+      VpcId: !Ref WSO2EnvVPC
+  WSO2EnvRouteTable2:
     Type: 'AWS::EC2::RouteTable'
     Properties:
-      VpcId: !Ref EIEnvVPC
-  EIEnvBastionEIPAssociation:
+      VpcId: !Ref WSO2EnvVPC
+  WSO2EnvBastionEIPAssociation:
     Type: 'AWS::EC2::EIPAssociation'
     Properties:
-      AllocationId: !GetAtt EIEnvBastionEIP.AllocationId
-      InstanceId: !Ref EIEnvBastionNode
+      AllocationId: !GetAtt WSO2EnvBastionEIP.AllocationId
+      InstanceId: !Ref WSO2EnvBastionNode
 
   ################################
   # Create network configurations
   ################################
-  EIEnvNATGateway:
+  WSO2EnvNATGateway:
     DependsOn: gw1
     Type: AWS::EC2::NatGateway
     Properties:
-      AllocationId: !GetAtt EIEnvEIP1.AllocationId
-      SubnetId: !Ref EIEnvPublicSubnet1
+      AllocationId: !GetAtt WSO2EnvEIP1.AllocationId
+      SubnetId: !Ref WSO2EnvPublicSubnet1
       Tags:
         - Key: Name
-          Value: EIEnvNatGateway
+          Value: WSO2EnvNatGateway
   acl1:
     Type: 'AWS::EC2::NetworkAclEntry'
     Properties:
@@ -138,7 +187,7 @@ Resources:
       Protocol: '-1'
       RuleAction: allow
       RuleNumber: '100'
-      NetworkAclId: !Ref EIEnvNetworkAcl
+      NetworkAclId: !Ref WSO2EnvNetworkAcl
   acl2:
     Type: 'AWS::EC2::NetworkAclEntry'
     Properties:
@@ -146,73 +195,73 @@ Resources:
       Protocol: '-1'
       RuleAction: allow
       RuleNumber: '100'
-      NetworkAclId: !Ref EIEnvNetworkAcl
+      NetworkAclId: !Ref WSO2EnvNetworkAcl
   subnetacl1:
     Type: 'AWS::EC2::SubnetNetworkAclAssociation'
     Properties:
-      NetworkAclId: !Ref EIEnvNetworkAcl
-      SubnetId: !Ref EIEnvPrivateSubnet1
+      NetworkAclId: !Ref WSO2EnvNetworkAcl
+      SubnetId: !Ref WSO2EnvPrivateSubnet1
   subnetacl2:
     Type: 'AWS::EC2::SubnetNetworkAclAssociation'
     Properties:
-      NetworkAclId: !Ref EIEnvNetworkAcl
-      SubnetId: !Ref EIEnvPublicSubnet1
+      NetworkAclId: !Ref WSO2EnvNetworkAcl
+      SubnetId: !Ref WSO2EnvPublicSubnet1
   gw1:
     Type: 'AWS::EC2::VPCGatewayAttachment'
     Properties:
-      VpcId: !Ref EIEnvVPC
-      InternetGatewayId: !Ref EIEnvInternetGateway
+      VpcId: !Ref WSO2EnvVPC
+      InternetGatewayId: !Ref WSO2EnvInternetGateway
   subnetroute1:
     Type: 'AWS::EC2::SubnetRouteTableAssociation'
     Properties:
-      RouteTableId: !Ref EIEnvPublicRouteTable1
-      SubnetId: !Ref EIEnvPublicSubnet1
+      RouteTableId: !Ref WSO2EnvPublicRouteTable1
+      SubnetId: !Ref WSO2EnvPublicSubnet1
 
   subnetroute2:
     Type: 'AWS::EC2::SubnetRouteTableAssociation'
     Properties:
-      RouteTableId: !Ref EIEnvRouteTable2
-      SubnetId: !Ref EIEnvPrivateSubnet1
+      RouteTableId: !Ref WSO2EnvRouteTable2
+      SubnetId: !Ref WSO2EnvPrivateSubnet1
   route1:
     Type: 'AWS::EC2::Route'
     Properties:
       DestinationCidrBlock: 0.0.0.0/0
-      RouteTableId: !Ref EIEnvPublicRouteTable1
-      GatewayId: !Ref EIEnvInternetGateway
+      RouteTableId: !Ref WSO2EnvPublicRouteTable1
+      GatewayId: !Ref WSO2EnvInternetGateway
     DependsOn: gw1
   route2:
     Type: 'AWS::EC2::Route'
     Properties:
       DestinationCidrBlock: 0.0.0.0/0
-      RouteTableId: !Ref EIEnvRouteTable2
-      NatGatewayId: !Ref EIEnvNATGateway
+      RouteTableId: !Ref WSO2EnvRouteTable2
+      NatGatewayId: !Ref WSO2EnvNATGateway
   dchpassoc1:
     Type: 'AWS::EC2::VPCDHCPOptionsAssociation'
     Properties:
-      VpcId: !Ref EIEnvVPC
-      DhcpOptionsId: !Ref EIEnvDHCPOptions
+      VpcId: !Ref WSO2EnvVPC
+      DhcpOptionsId: !Ref WSO2EnvDHCPOptions
 
   #########################
   # Create security groups
   #########################
-  EIEnvInstanceSecurityGroup:
+  WSO2EnvInstanceSecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
       GroupDescription: security group for EI EC2 compute instances
-      VpcId: !Ref EIEnvVPC
+      VpcId: !Ref WSO2EnvVPC
       SecurityGroupIngress:
       - IpProtocol: tcp
-        FromPort: -1
-        ToPort: -1
+        FromPort: 0
+        ToPort: 65535
         CidrIp: 0.0.0.0/0
       SecurityGroupEgress:
       - IpProtocol: -1
         CidrIp: 0.0.0.0/0
-  EIEnvLBSecurityGroup:
+  WSO2EnvLBSecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
       GroupDescription: security group for EI EC2 compute instances
-      VpcId: !Ref EIEnvVPC
+      VpcId: !Ref WSO2EnvVPC
       SecurityGroupIngress:
       - IpProtocol: tcp
         FromPort: 9763
@@ -237,11 +286,11 @@ Resources:
   ###########################
   # Create Elastic IPs
   ###########################
-  EIEnvBastionEIP:
+  WSO2EnvBastionEIP:
     Type: 'AWS::EC2::EIP'
     Properties:
       Domain: vpc
-  EIEnvEIP1:
+  WSO2EnvEIP1:
     Type: 'AWS::EC2::EIP'
     Properties:
       Domain: vpc
@@ -249,27 +298,15 @@ Resources:
   #######################
   # EC2 Compute instances
   #######################
-  EIEnvBastionNode:
+  WSO2EnvBastionNode:
     Type: 'AWS::EC2::Instance'
     Properties:
       DisableApiTermination: 'false'
       InstanceInitiatedShutdownBehavior: stop
-      ImageId: ami-cd0f5cb6
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
       InstanceType: t2.micro
       KeyName: !Ref EC2KeyPair
       Monitoring: 'false'
-#      UserData:
-#        Fn::Base64:
-#          !Sub |
-#            #!/bin/bash -xe
-#            cd /home/ubuntu/
-#            git clone https://github.com/Asitha/aws-cloudformation-templates.git --depth 1
-#            chown -R ubuntu aws-cloudformation-templates
-#            cd aws-cloudformation-templates
-#            chmod +x ./setup-instance-env.sh
-#            chmod +x ./setup-ei6.1.1.sh
-#            sh ./setup-instance-env.sh ubuntu ${WUMUserName} ${WUMPassword} &> /home/ubuntu/setup-instance-env.out
-#            sh ./setup-ei6.1.1.sh &> /home/ubuntu/setup-ei611-env.out
       Tags:
         - Key: Name
           Value: ei-bastion-node
@@ -277,18 +314,18 @@ Resources:
         - DeleteOnTermination: 'true'
           Description: Primary network interface
           DeviceIndex: 0
-          SubnetId: !Ref EIEnvPublicSubnet1
+          SubnetId: !Ref WSO2EnvPublicSubnet1
           PrivateIpAddresses:
             - PrivateIpAddress: 10.0.0.70
               Primary: 'true'
           GroupSet:
-            - !Ref EIEnvInstanceSecurityGroup
-  EIEnvMainInstance:
+            - !Ref WSO2EnvInstanceSecurityGroup
+  WSO2EnvMainInstance:
     Type: 'AWS::EC2::Instance'
     Properties:
       DisableApiTermination: 'false'
       InstanceInitiatedShutdownBehavior: stop
-      ImageId: ami-cd0f5cb6
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
       InstanceType: !Ref InstanceType
       KeyName: !Ref EC2KeyPair
       Monitoring: 'false'
@@ -303,7 +340,9 @@ Resources:
             chmod +x ./setup-instance-env.sh
             chmod +x ./setup-ei6.1.1.sh
             bash ./setup-instance-env.sh ${InstanceUserName} ${WUMUserName} ${WUMPassword} &> /home/ubuntu/setup-instance-env.out
-            bash ./setup-ei6.1.1.sh ${InstanceUserName} local  &> /home/ubuntu/setup-ei-env.out
+            if [ "${DeploymentType}" = "OneNodeEI6.1.1-Deployment" ]; then
+              bash ./setup-ei6.1.1.sh ${InstanceUserName} local  &> /home/ubuntu/setup-ei-env.out
+            fi
       Tags:
         - Key: Name
           Value: ei-instance1
@@ -311,20 +350,20 @@ Resources:
         - DeleteOnTermination: 'true'
           Description: Primary network interface
           DeviceIndex: 0
-          SubnetId: !Ref EIEnvPrivateSubnet1
+          SubnetId: !Ref WSO2EnvPrivateSubnet1
           PrivateIpAddresses:
             - PrivateIpAddress: 10.0.1.71
               Primary: 'true'
           GroupSet:
-            - !Ref EIEnvInstanceSecurityGroup
-  EIEnvAnalyticsInstance:
+            - !Ref WSO2EnvInstanceSecurityGroup
+  WSO2EnvAnalyticsInstance:
     Type: 'AWS::EC2::Instance'
     Properties:
       DisableApiTermination: 'false'
       InstanceInitiatedShutdownBehavior: stop
-      ImageId: ami-09d2fb69
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
       InstanceType: t2.micro
-      KeyName: test-key
+      KeyName: !Ref EC2KeyPair
       Monitoring: 'false'
       UserData: 
         Fn::Base64:
@@ -344,21 +383,21 @@ Resources:
         - DeleteOnTermination: 'true'
           Description: Primary network interface
           DeviceIndex: 0
-          SubnetId: !Ref EIEnvPrivateSubnet1
+          SubnetId: !Ref WSO2EnvPrivateSubnet1
           PrivateIpAddresses:
             - PrivateIpAddress: 10.0.1.72
               Primary: 'true'
           GroupSet:
-            - !Ref EIEnvInstanceSecurityGroup
+            - !Ref WSO2EnvInstanceSecurityGroup
 
   #######################
   # Create RDS instances
   #######################
-  EIEnvDBInstance:
+  WSO2EnvDBInstance:
     Type: AWS::RDS::DBInstance
     Properties:
-      DBSecurityGroups: 
-        - !Ref EIEnvDbSecurityByCIDRIPGroup
+#      DBSecurityGroups:
+#        - !Ref WSO2EnvDbSecurityByCIDRIPGroup
       AllocatedStorage: 20
       DBInstanceClass: db.t2.micro
       Engine: MySQL
@@ -371,35 +410,35 @@ Resources:
         - '0'
         - !GetAZs ''
     DeletionPolicy: Snapshot
-  EIEnvDbSecurityByCIDRIPGroup:
-    Type: AWS::RDS::DBSecurityGroup
-    Properties:
-      GroupDescription: Ingress for CIDRIP
-      DBSecurityGroupIngress:
-        - CIDRIP: "10.0.0.0/16"
+#  WSO2EnvDbSecurityByCIDRIPGroup:
+#    Type: AWS::RDS::DBSecurityGroup
+#    Properties:
+#      GroupDescription: Ingress for CIDRIP
+#      DBSecurityGroupIngress:
+#        - CIDRIP: "10.0.0.0/16"
 
   ########################
   # Create Load Balancers
   ########################
-  EIEnvAxis28280ALBListener:
+  WSO2EnvAxis28280ALBListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
         - Type: forward
-          TargetGroupArn: !Ref EIEnvAxis28280LBTargetGroup
-      LoadBalancerArn: !Ref EIEnvAxis28280ApplicationLoadBalancer
+          TargetGroupArn: !Ref WSO2EnvAxis28280LBTargetGroup
+      LoadBalancerArn: !Ref WSO2EnvAxis28280ApplicationLoadBalancer
       Port: 8080
       Protocol: HTTP
-  EIEnvAxis28280ApplicationLoadBalancer:
+  WSO2EnvAxis28280ApplicationLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
       Scheme: internet-facing
       Subnets:
-        - !Ref EIEnvPublicSubnet1
-        - !Ref EIEnvPublicSubnet2
+        - !Ref WSO2EnvPublicSubnet1
+        - !Ref WSO2EnvPublicSubnet2
       SecurityGroups:
-        - !Ref EIEnvLBSecurityGroup
-  EIEnvAxis28280LBTargetGroup:
+        - !Ref WSO2EnvLBSecurityGroup
+  WSO2EnvAxis28280LBTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       HealthCheckIntervalSeconds: 30
@@ -417,11 +456,11 @@ Resources:
       - Key: deregistration_delay.timeout_seconds
         Value: '20'
       Targets:
-      - Id: !Ref EIEnvMainInstance
+      - Id: !Ref WSO2EnvMainInstance
         Port: 8280
       UnhealthyThresholdCount: 3
       VpcId:
-        Ref: EIEnvVPC
+        Ref: WSO2EnvVPC
       Tags:
       - Key: Name
         Value: ei-axis2-8280
@@ -432,15 +471,15 @@ Resources:
 Description: Creates a VPC with two subnets for EI
 Outputs:
   DatabaseURL: 
-    Value: !Sub '${EIEnvDBInstance.Endpoint.Address}:${EIEnvDBInstance.Endpoint.Port}'
+    Value: !Sub '${WSO2EnvDBInstance.Endpoint.Address}:${WSO2EnvDBInstance.Endpoint.Port}'
     Description: "MySQL database url"
   BastionEIP:
-    Value: !Sub '${EIEnvBastionNode.PublicIp}'
+    Value: !Sub '${WSO2EnvBastionNode.PublicIp}'
     Description: Elastic IP for the Bastion node
   EIELB:
     Value: !Join
       - ''
       - - 'http://'
         - !GetAtt
-          - EIEnvAxis28280ApplicationLoadBalancer
+          - WSO2EnvAxis28280ApplicationLoadBalancer
           - DNSName
