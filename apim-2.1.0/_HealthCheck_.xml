@@ -1,0 +1,7 @@
+<api xmlns="http://ws.apache.org/ns/synapse" name="_HealthCheck_" context="/healthcheck">
+    <resource methods="GET HEAD POST OPTIONS">
+        <inSequence>
+            <respond/>
+        </inSequence>
+    </resource>
+</api>
