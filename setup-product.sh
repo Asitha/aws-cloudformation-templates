@@ -7,6 +7,9 @@ readonly INSTALL_DIR=$4
 readonly DEPLOYMENT_TYPE=$5
 readonly CONF_TEMPLATE_DIR=$6
 readonly CONF_MAPPINGS_FILE=$7
+readonly DB_URL=$8
+readonly DB_USERNAME=$9
+readonly DB_PASSWORD=$10
 
 readonly WUM_PRODUCT_DIR=/home/${USERNAME}/.wum-wso2/products/${PRODUCT_NAME}/${PRODUCT_VERSION}
 readonly WUM_PRODUCT_NAME=${PRODUCT_NAME}-${PRODUCT_VERSION}
@@ -35,6 +38,10 @@ create_configs_from_templates() {
         grep -rl ${key} ${tmp_conf_dir} | xargs -rn 1 sed -i "s/#_${escapedKey}_#/${escapedValue}/g"
       fi
     done < "${input}"
+
+    grep -rl \#_db_url_# ${tmp_conf_dir} | xargs -rn 1 sed -i "s/#_db_url_#/${DB_URL}/g"
+    grep -rl \#_db_user_# ${tmp_conf_dir} | xargs -rn 1 sed -i "s/#_db_user_#/${DB_USERNAME}/g"
+    grep -rl \#_db_password_# ${tmp_conf_dir} | xargs -rn 1 sed -i "s/#_db_password_#/${DB_PASSWORD}/g"
 }
 
 replace_configs() {

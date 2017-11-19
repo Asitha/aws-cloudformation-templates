@@ -88,6 +88,17 @@ Parameters:
       - No
     ConstraintDescription: Must specify whether to use an external RDS instance or not
     Description: Use RDS instance as an external DB for the nodes.
+  RDSUsername:
+    Type: String
+    Default: root
+    ConstraintDescription: Must specify username for the RDS admin user
+    Description: RDS instance admin username.
+  RDSPassword:
+    Type: String
+    NoEcho: true
+    Default: root1234
+    ConstraintDescription: Must specify password for the RDS admin user
+    Description: RDS instance admin user password [Default set to "root1234"].
 Conditions:
   CreateRDSResource: !Equals [ !Ref UseRDS, Yes ]
 
@@ -340,8 +351,13 @@ Resources:
             chmod +x ./setup-instance-env.sh
             chmod +x ./setup-ei6.1.1.sh
             bash ./setup-instance-env.sh ${InstanceUserName} ${WUMUserName} ${WUMPassword} &> /home/ubuntu/setup-instance-env.out
+
             if [ "${DeploymentType}" = "OneNodeEI6.1.1-Deployment" ]; then
-              bash ./setup-ei6.1.1.sh ${InstanceUserName} local  &> /home/ubuntu/setup-ei-env.out
+              local="local"
+              if [ "${UseRDS}" = "Yes" ]; then
+                local="useRDS"
+              fi
+              bash ./setup-ei6.1.1.sh ${InstanceUserName} $local ${WSO2EnvDBInstance.Endpoint.Address} ${WSO2EnvDBInstance.Endpoint.Port} ${RDSUsername} ${RDSPassword} &> /home/ubuntu/setup-ei-env.out
             fi
       Tags:
         - Key: Name
@@ -396,27 +412,42 @@ Resources:
   WSO2EnvDBInstance:
     Type: AWS::RDS::DBInstance
     Properties:
-#      DBSecurityGroups:
-#        - !Ref WSO2EnvDbSecurityByCIDRIPGroup
       AllocatedStorage: 20
       DBInstanceClass: db.t2.micro
       Engine: MySQL
-      DBInstanceIdentifier: eidbinstance
+      DBInstanceIdentifier: wso2-ei-dbinstance
       MasterUsername: root
       MasterUserPassword: root1234
       AutoMinorVersionUpgrade: false
       BackupRetentionPeriod: 0
+      DBSubnetGroupName: !Ref WSO2EnvDBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref WSO2EnvDBSecurityGroup
       AvailabilityZone: !Select
         - '0'
         - !GetAZs ''
     DeletionPolicy: Snapshot
-#  WSO2EnvDbSecurityByCIDRIPGroup:
-#    Type: AWS::RDS::DBSecurityGroup
-#    Properties:
-#      GroupDescription: Ingress for CIDRIP
-#      DBSecurityGroupIngress:
-#        - CIDRIP: "10.0.0.0/16"
-
+  WSO2EnvDBSubnetGroup:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupDescription: RDS subnet group
+      SubnetIds:
+        - !Ref WSO2EnvPublicSubnet1
+        - !Ref WSO2EnvPublicSubnet2
+- !Ref WSO2EnvPrivateSubnet1
+  WSO2EnvDBSecurityGroup:
+      Type: 'AWS::EC2::SecurityGroup'
+      Properties:
+        GroupDescription: Security group for EI RDS
+        VpcId: !Ref WSO2EnvVPC
+        SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 0.0.0.0/0
+        SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
   ########################
   # Create Load Balancers
   ########################

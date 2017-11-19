@@ -3,8 +3,9 @@
 readonly USERNAME=$1
 readonly DEPLOYMENT_TYPE=$2
 readonly DB_HOSTNAME=$3
-readonly DB_USERNAME=$4
-readonly DB_PASSWORD=$5
+readonly DB_PORT=$4
+readonly DB_USERNAME=$5
+readonly DB_PASSWORD=$6
 
 readonly PRODUCT_NAME=wso2ei
 readonly PRODUCT_VERSION=6.1.1
@@ -39,7 +40,8 @@ start_product() {
 }
 
 main() {
-    bash setup-product.sh ${USERNAME} ${PRODUCT_NAME} ${PRODUCT_VERSION} ${EI_INSTALL_DIR} ${DEPLOYMENT_TYPE} ${CONF_TEMPLATE_DIR} ${CONF_MAPPING_FILE}
+    dburl="jdbc:mysql://${DB_HOSTNAME}:${DB_PORT}"
+    bash setup-product.sh ${USERNAME} ${PRODUCT_NAME} ${PRODUCT_VERSION} ${EI_INSTALL_DIR} ${DEPLOYMENT_TYPE} ${CONF_TEMPLATE_DIR} ${CONF_MAPPING_FILE} ${dburl} ${DB_USERNAME} ${DB_PASSWORD}
     if [ "${DEPLOYMENT_TYPE}" != "local" ]; then
         setup_database
     fi
